@@ -138,7 +138,7 @@ class TestTopSoC(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1)(implic
         ))
       )
     ))
-    l2.mmioBridge.mmioNode := mmioClientNode
+//    l2.mmioBridge.mmioNode := mmioClientNode
   }
 
   ram.node := 
