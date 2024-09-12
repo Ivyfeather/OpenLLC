@@ -102,6 +102,19 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
   }))))
   val l2_nodes = l2s.map(_.node)
 
+  val l3 = LazyModule(new DummyLLC(numCores)(new Config((_, _, _) => {
+    case OpenLLCParamKey => OpenLLCParam(
+      ways = 2,
+      sets = 4,
+      blockBytes = 2,
+      beatBytes = 1,
+      mshrs = 4,
+      fullAddressBits = 5
+    )
+  })))
+  // TODO: WARNING: check this [we set beatBytes = 2 to pass compilation]
+  val ram = LazyModule(new AXI4RAM(AddressSet(0, 0x1fL), beatBytes = 2))
+
   val bankBinders = (0 until numCores).map(_ => BankBinder(banks, 2))
 
   l0_nodes.zip(l1_nodes).foreach { case (l0, l1) => l1 := l0 }
@@ -120,6 +133,11 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
       l1xbar
   }
 
+  ram.node :=
+    AXI4Xbar() :=
+    AXI4Fragmenter() :=
+    l3.axi4node
+
   lazy val module = new LazyModuleImp(this){
     val timer = WireDefault(0.U(64.W))
     val logEnable = WireDefault(false.B)
@@ -132,8 +150,6 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
     dontTouch(dump)
 
     val io = IO(Vec(numCores, new Bundle() {
-      val chi = new PortIO
-
       // Input signals for formal verification
       val topInputRandomAddrs = Input(UInt(5.W))
       val topInputNeedT = Input(Bool())
@@ -150,7 +166,7 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
     }
 
     l2s.zipWithIndex.foreach { case (l2, i) =>
-      l2.module.io_chi <> io(i).chi
+      l3.module.io.rn(i) <> l2.module.io_chi
       dontTouch(l2.module.io)
 
       l2.module.io.hartId := i.U
@@ -159,6 +175,7 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
       l2.module.io.l2_tlb_req <> DontCare
     }
 
+    // ====== Verification ======
     val verify_timer = RegInit(0.U(50.W))
     verify_timer := verify_timer + 1.U
     val dir_resetFinish = WireDefault(false.B)
