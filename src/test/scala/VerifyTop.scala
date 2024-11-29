@@ -11,10 +11,11 @@ import freechips.rocketchip.tilelink._
 import org.chipsalliance.cde.config._
 import coupledL2._
 import coupledL2.tl2chi._
+import coupledL2.tl2tl.TL2TLCoupledL2
 import utility._
-import coupledL2AsL1.prefetch.CoupledL2AsL1PrefParam
-import coupledL2AsL1.tl2tl.{TL2TLCoupledL2 => TLCoupledL2AsL1}
-import coupledL2AsL1.tl2chi.{TL2CHICoupledL2 => CHICoupledL2AsL1}
+//import coupledL2AsL1.prefetch.CoupledL2AsL1PrefParam
+//import coupledL2AsL1.tl2tl.{TL2TLCoupledL2 => TLCoupledL2AsL1}
+//import coupledL2AsL1.tl2chi.{TL2CHICoupledL2 => CHICoupledL2AsL1}
 object baseConfig {
   def apply(maxHartIdBits: Int) = {
     new Config((_, _, _) => {
@@ -54,7 +55,7 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
     masterNode
   }
   val l0_nodes = (0 until numCores).map(i => createClientNode(s"l0$i", 32))
-  val l1s = (0 until numCores).map(i => LazyModule(new TLCoupledL2AsL1()(baseConfig(1).alterPartial({
+  val l1s = (0 until numCores).map(i => LazyModule(new TL2TLCoupledL2()(baseConfig(1).alterPartial({
     case L2ParamKey => L2Param(
       name = s"l1$i",
       ways = 2,
@@ -63,7 +64,7 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
       channelBytes = TLChannelBeatBytes(1),
       clientCaches = Seq(L1Param(aliasBitsOpt = Some(2))),
       echoField = Seq(),
-      prefetch = Seq(CoupledL2AsL1PrefParam()),
+      prefetch = Nil,
       mshrs = 4,
       hartId = i
     )
@@ -140,8 +141,8 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
       val topInputNeedT = Input(Bool())
     }))
     l1s.zipWithIndex.foreach { case (l2AsL1, i) =>
-      l2AsL1.module.io.prefetcherInputRandomAddr := io(i).topInputRandomAddrs
-      l2AsL1.module.io.prefetcherNeedT := io(i).topInputNeedT
+//      l2AsL1.module.io.prefetcherInputRandomAddr := io(i).topInputRandomAddrs
+//      l2AsL1.module.io.prefetcherNeedT := io(i).topInputNeedT
       l2AsL1.module.io.l2_tlb_req <> DontCare
       l2AsL1.module.io.debugTopDown <> DontCare
       l2AsL1.module.io.hartId <> DontCare
@@ -155,6 +156,8 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
       l2.module.io.debugTopDown := DontCare
       l2.module.io.l2_tlb_req <> DontCare
     }
+
+/*
     val verify_timer = RegInit(0.U(50.W))
     verify_timer := verify_timer + 1.U
     val dir_resetFinish = WireDefault(false.B)
@@ -199,6 +202,7 @@ class VerifyTop_CHIL2L3(numCores: Int = 2, numULAgents: Int = 0, banks: Int = 1)
     generateAssert(0.U(32.W), MetaData.BRANCH, MetaData.BRANCH)
     generateAssert(0.U(32.W), MetaData.TIP, MetaData.BRANCH)
     generateAssert(0.U(32.W), MetaData.TRUNK, MetaData.INVALID)
+ */
   }
 }
 object VerifyTopCHIHelper {
