@@ -16,7 +16,7 @@ test-top-l2l3l2:
 	mill -i OpenLLC.test.runMain openLLC.TestTopSoC_DualCore -td build
 
 verify-chi:
-	mill -i OpenLLC.test.runMain openLLC.VerifyTop_CHI_DualCore_0UL
+	mill -i OpenLLC.test.runMain openLLC.VerifyTop_CHI_DualCore_0UL -td build
 
 clean:
 	rm -rf ./build

@@ -10,6 +10,7 @@ import freechips.rocketchip.tile.MaxHartIdBits
 import freechips.rocketchip.tilelink._
 import org.chipsalliance.cde.config._
 import coupledL2._
+import coupledL2.tl2tl._
 import coupledL2.tl2chi._
 import cc.xiangshan.openncb._
 import cc.xiangshan.openncb.chi._
@@ -29,6 +30,7 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
   val delayFactor = 0.5
   val cacheParams = p(L2ParamKey)
 
+  // ******* Instantiate L0s *******
   def createClientNode(name: String, sources: Int) = {
     val masterNode = TLClientNode(Seq(
       TLMasterPortParameters.v2(
@@ -48,22 +50,42 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
     ))
     masterNode
   }
+  val l0_nodes = (0 until numCores).map(i => createClientNode(s"L0_$i", 32))
 
-  val l1d_nodes = (0 until numCores).map(i => createClientNode(s"l1d$i", 32))
-  val l1i_nodes = (0 until numCores).map {i =>
-    (0 until numULAgents).map { j =>
-      TLClientNode(Seq(
-        TLMasterPortParameters.v1(
-          clients = Seq(TLMasterParameters.v1(
-            name = s"l1i${i}_${j}",
-            sourceId = IdRange(0, 32)
-          ))
-        )
-      ))
-    }
-  }
+  // ******* Instantiate L1s *******
+  val l1d_nodes = (0 until numCores).map(i => LazyModule(new TL2TLCoupledL2()(new Config((site, here, up) => {
+    case L2ParamKey => cacheParams.copy(
+      name                = s"L1d_$i",
+      hartId              = i,
+    )
+    case EnableCHI => false
+    case huancun.BankBitsKey => 1 // FV: 1 bank for L1s
+    case MaxHartIdBits => log2Up(numCores)
+    case LogUtilsOptionsKey => LogUtilsOptions(
+      false,
+      here(L2ParamKey).enablePerf,
+      here(L2ParamKey).FPGAPlatform
+    )
+    case PerfCounterOptionsKey => PerfCounterOptions(
+      here(L2ParamKey).enablePerf && !here(L2ParamKey).FPGAPlatform,
+      here(L2ParamKey).enableRollingDB && !here(L2ParamKey).FPGAPlatform,
+      i
+    )
+  }))))
+  // val l1i_nodes = (0 until numCores).map {i =>
+  //   (0 until numULAgents).map { j =>
+  //     TLClientNode(Seq(
+  //       TLMasterPortParameters.v1(
+  //         clients = Seq(TLMasterParameters.v1(
+  //           name = s"L1i_${i}_${j}",
+  //           sourceId = IdRange(0, 32)
+  //         ))
+  //       )
+  //     ))
+  //   }
+  // }
 
-  // val l2 = LazyModule(new TL2CHICoupledL2())
+  // ******* Instantiate L2s *******
   val l2_nodes = (0 until numCores).map(i => LazyModule(new TL2CHICoupledL2()(new Config((site, here, up) => {
     case L2ParamKey => cacheParams.copy(
       name                = s"L2_$i",
@@ -85,6 +107,8 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
     )
   }))))
 
+  // L3 is defined as Module instead of LazyModule, so it is defined in LazyModuleImp below
+  // ******* Instantiate L3Bridge *******
   val l3Bridge = LazyModule(new OpenNCB()(new Config((site, here, up) => {
     case CHIIssue => issue
     case NCBParametersKey => new NCBParameters(
@@ -96,23 +120,27 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
     )
   })))
 
+  // ******* Instantiate Miscs *******
   val ram = LazyModule(new AXI4RAM(AddressSet(0, 0xff_ffffL), beatBytes = 32))
-
   val bankBinders = (0 until numCores).map(_ => BankBinder(banks, 64))
 
+  // ******* Connect L0s to L1s *******
+  l0_nodes.zip(l1d_nodes).foreach { case (l0, l1) => l1.node := l0 }
+
+  // ******* Connect L1s to L2s *******
   l1d_nodes.zip(l2_nodes).zipWithIndex.foreach { case ((l1d, l2), i) =>
     val l1xbar = TLXbar()
     l1xbar := 
       TLBuffer() :=
       TLLogger(s"L2_L1[${i}].C[0]", !cacheParams.FPGAPlatform && cacheParams.enableTLLog) := 
-      l1d
+      l1d.node
 
-    l1i_nodes(i).zipWithIndex.foreach { case (l1i, j) =>
-      l1xbar :=
-        TLBuffer() :=
-        TLLogger(s"L2_L1[${i}].UL[${j}]", !cacheParams.FPGAPlatform && cacheParams.enableTLLog) :=
-        l1i
-    }
+    // l1i_nodes(i).zipWithIndex.foreach { case (l1i, j) =>
+    //   l1xbar :=
+    //     TLBuffer() :=
+    //     TLLogger(s"L2_L1[${i}].UL[${j}]", !cacheParams.FPGAPlatform && cacheParams.enableTLLog) :=
+    //     l1i
+    // }
     
     l2.managerNode :=
       TLXbar() :=*
@@ -148,17 +176,17 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
     dontTouch(clean)
     dontTouch(dump)
 
-    l1d_nodes.zipWithIndex.foreach{
-      case (node, i) =>
-        node.makeIOs()(ValName(s"master_port_$i"))
-    }
-    if (numULAgents != 0) {
-      l1i_nodes.zipWithIndex.foreach { case (core, i) =>
-        core.zipWithIndex.foreach { case (node, j) =>
-          node.makeIOs()(ValName(s"master_ul_port_${i}_${j}"))
-        }
-      }
-    }
+    // l1d_nodes.zipWithIndex.foreach{
+    //   case (node, i) =>
+    //     node.makeIOs()(ValName(s"master_port_$i"))
+    // }
+    // if (numULAgents != 0) {
+    //   l1i_nodes.zipWithIndex.foreach { case (core, i) =>
+    //     core.zipWithIndex.foreach { case (node, j) =>
+    //       node.makeIOs()(ValName(s"master_ul_port_${i}_${j}"))
+    //     }
+    //   }
+    // }
 
     val l3 = Module(new OpenLLC()(new Config((site, here, up) => {
       case CHIIssue => issue
@@ -168,11 +196,18 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
           sets = 2,
         )),
         fullAddressBits = ADDR_WIDTH,
-        banks = 1,
+        banks = 1,  // TODO: can be modified
         ways = 2,
         sets = 2
       )
     })))
+
+    l1d_nodes.zipWithIndex.foreach { case (l1d, i) =>
+      dontTouch(l1d.module.io)
+      l1d.module.io.hartId := i.U
+      l1d.module.io.debugTopDown := DontCare
+      l1d.module.io.l2_tlb_req <> DontCare
+    }
 
     l2_nodes.zipWithIndex.foreach { case (l2, i) =>
       /*
