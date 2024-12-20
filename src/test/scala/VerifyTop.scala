@@ -237,7 +237,7 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
 object VerifyTopCHIHelper {
   def gen(fTop: Parameters => VerifyTop)(args: Array[String]) = {
     val FPGAPlatform    = false
-    val enableChiselDB  = !FPGAPlatform && true
+    val enableChiselDB  = false
     
     val config = new Config((_, _, _) => {
       case L2ParamKey => L2Param(
@@ -246,9 +246,9 @@ object VerifyTopCHIHelper {
         clientCaches        = Seq(L1Param(aliasBitsOpt = Some(2))),
         // echoField        = Seq(DirtyField),
         enablePerf          = false,
-        enableRollingDB     = enableChiselDB && true,
-        enableMonitor       = enableChiselDB && true,
-        enableTLLog         = enableChiselDB && true,
+        enableRollingDB     = false,
+        enableMonitor       = false,
+        enableTLLog         = false,
         elaboratedTopDown   = false,
         FPGAPlatform        = FPGAPlatform,
 
