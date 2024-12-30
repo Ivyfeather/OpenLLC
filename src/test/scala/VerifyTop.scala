@@ -12,6 +12,7 @@ import org.chipsalliance.cde.config._
 import coupledL2._
 import coupledL2.tl2tl._
 import coupledL2.tl2chi._
+import coupledL2AsL1._
 import cc.xiangshan.openncb._
 import cc.xiangshan.openncb.chi._
 import utility._
@@ -53,10 +54,11 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
   val l0_nodes = (0 until numCores).map(i => createClientNode(s"L0_$i", 32))
 
   // ******* Instantiate L1s *******
-  val l1d_nodes = (0 until numCores).map(i => LazyModule(new TL2TLCoupledL2()(new Config((site, here, up) => {
+  val l1d_nodes = (0 until numCores).map(i => LazyModule(new TLCoupledL2AsL1()(new Config((site, here, up) => {
     case L2ParamKey => cacheParams.copy(
       name                = s"L1d_$i",
       hartId              = i,
+      prefetch            = Seq(InputAsPrefectchParam())
     )
     case EnableCHI => false
     case huancun.BankBitsKey => 1 // FV: 1 bank for L1s
@@ -176,10 +178,19 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
     dontTouch(clean)
     dontTouch(dump)
 
-    // l1d_nodes.zipWithIndex.foreach{
-    //   case (node, i) =>
-    //     node.makeIOs()(ValName(s"master_port_$i"))
-    // }
+
+    val io = IO(Vec(numCores, new Bundle() {
+      // Input signals for formal verification
+      val inputAddr = Input(UInt(ram.node.in.head._2.bundle.addrBits.W))
+      val inputNeedT = Input(Bool())
+    }))
+
+     l1d_nodes.zipWithIndex.foreach{
+       case (node, i) =>
+         node.module.io_inputAddr := io(0).inputAddr
+         node.module.io_inputNeedT := io(0).inputNeedT
+     }
+
     // if (numULAgents != 0) {
     //   l1i_nodes.zipWithIndex.foreach { case (core, i) =>
     //     core.zipWithIndex.foreach { case (node, j) =>
