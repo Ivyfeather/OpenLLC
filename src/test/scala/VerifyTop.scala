@@ -13,6 +13,7 @@ import coupledL2._
 import coupledL2.tl2tl._
 import coupledL2.tl2chi._
 import coupledL2AsL1._
+import chiL2FV._
 import cc.xiangshan.openncb._
 import cc.xiangshan.openncb.chi._
 import utility._
@@ -88,7 +89,7 @@ class VerifyTop(numCores: Int = 1, numULAgents: Int = 0, banks: Int = 1, issue: 
   // }
 
   // ******* Instantiate L2s *******
-  val l2_nodes = (0 until numCores).map(i => LazyModule(new TL2CHICoupledL2()(new Config((site, here, up) => {
+  val l2_nodes = (0 until numCores).map(i => LazyModule(new TL2CHICoupledL2FV()(new Config((site, here, up) => {
     case L2ParamKey => cacheParams.copy(
       name                = s"L2_$i",
       hartId              = i,
