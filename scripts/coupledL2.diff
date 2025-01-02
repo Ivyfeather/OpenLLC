@@ -1,0 +1,51 @@
+diff --git a/src/main/scala/coupledL2/CoupledL2.scala b/src/main/scala/coupledL2/CoupledL2.scala
+index 3c5a263..e4473ed 100644
+@@ -403,26 +403,33 @@ abstract class CoupledL2Base(implicit p: Parameters) extends LazyModule with Has
+     val releaseSourceD = Wire(Vec(banks, Bool()))
+     val allCanFire = (RegNextN(!hintFire, sliceAhead) && RegNextN(!hintFire, sliceAhead + 1)) || Cat(releaseSourceD).orR
+
++    def createSlice(enableCHI: Boolean,
++                    sliceId: Int,
++                    edgeIn: TLEdgeIn,
++                    edgeOut: TLEdgeOut): BaseSlice[_ <: BaseOuterBundle] = {
++      if (enableCHI) {
++        Module(new tl2chi.Slice()(p.alterPartial {
++          case EdgeInKey => edgeIn
++          case EdgeOutKey => edgeOut
++          case BankBitsKey => bankBits
++          case SliceIdKey => sliceId
++        }))
++      } else {
++        Module(new tl2tl.Slice()(p.alterPartial {
++          case EdgeInKey => edgeIn
++          case EdgeOutKey => edgeOut
++          case BankBitsKey => bankBits
++          case SliceIdKey => sliceId
++        }))
++      }
++    }
++
+     val slices = node.in.zip(node.out).zipWithIndex.map {
+       case (((in, edgeIn), (out, edgeOut)), i) =>
+         require(in.params.dataBits == out.params.dataBits)
+         val rst_L2 = reset
+         val slice = withReset(rst_L2) {
+-          if (enableCHI) {
+-            Module(new tl2chi.Slice()(p.alterPartial {
+-              case EdgeInKey => edgeIn
+-              case EdgeOutKey => edgeOut
+-              case BankBitsKey => bankBits
+-              case SliceIdKey => i
+-            }))
+-          } else {
+-            Module(new tl2tl.Slice()(p.alterPartial {
+-              case EdgeInKey => edgeIn
+-              case EdgeOutKey => edgeOut
+-              case BankBitsKey => bankBits
+-              case SliceIdKey => i
+-            }))
+-          }
++          createSlice(enableCHI, i, edgeIn, edgeOut)
+         }
+         slice.io.in <> in
+         if (enableHintGuidedGrant) {
