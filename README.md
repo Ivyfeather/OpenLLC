@@ -4,6 +4,20 @@
 
 ```
 make init
-make test-top-l3
+make verify-chi
 ```
 
+## Update to lastest L2/L3
+
+```
+# clear all changes in CPL2
+cd coupledL2 && git reset --hard HEAD && cd ..
+
+# fetch lastest OpenXiangShan/OpenLLC
+git fetch xiangshan master
+
+# [operate at cpl2fv branch]
+# rebase fv commits above master commits
+git rebase xiangshan/master
+make init
+```

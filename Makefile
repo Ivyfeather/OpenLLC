@@ -1,4 +1,5 @@
 init:
+	git remote add xiangshan https://github.com/OpenXiangShan/OpenLLC.git
 	git submodule update --init
 	cd rocket-chip && git submodule update --init hardfloat cde
 	cd coupledL2 && make init
