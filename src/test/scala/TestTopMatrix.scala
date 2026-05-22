@@ -18,6 +18,16 @@ import utility.chiron._
 
 import scala.collection.mutable.ArrayBuffer
 
+object TestTopMatrixParams {
+  val l2Sets: Int = 64
+  val l2Ways: Int = 8
+  val l3CDirSets: Int = 128
+  val l3CDirWays: Int = 6
+  val l3Sets: Int = 512
+  val l3Ways: Int = 8
+  val l3Banks: Int = 1
+}
+
 class TestTopMatrix(
   numCores: Int = 1,
   numULAgents: Int = 0,
@@ -74,7 +84,7 @@ class TestTopMatrix(
         channelBytes = TLChannelBeatBytes(l2Params.blockBytes),
         minLatency = 1,
         echoFields = Nil,
-        requestFields = Seq(MatrixField(2)),
+        requestFields = Seq(MatrixField(2), AmeIndexField()),
         responseKeys = l2Params.respKey
       )
     ))
@@ -245,7 +255,12 @@ class TestTopMatrix(
     val l3 = Module(new OpenLLC()(new Config((site, here, up) => {
       case CHIIssue => issue
       case OpenLLCParamKey => l3Params.copy(
-        clientCaches    = Seq.fill(numCores)(l2Params.copy(ways = 2, sets = 2)),
+        clientCaches    = Seq.fill(numCores)(
+          l2Params.copy(
+            ways = TestTopMatrixParams.l3CDirWays,
+            sets = TestTopMatrixParams.l3CDirSets
+          )
+        ),
         fullAddressBits = ADDR_WIDTH,
         hartIds         = 0 until numCores
       )
@@ -395,12 +410,12 @@ Usage: TestTopMatrix [<--option> <values>]
 
   val config = new Config((_, _, _) => {
     case L2ParamKey => L2Param(
-      ways                = 4,
-      sets                = 128,
+      ways                = TestTopMatrixParams.l2Ways,
+      sets                = TestTopMatrixParams.l2Sets,
       clientCaches        = Seq(L1Param(aliasBitsOpt = Some(2))),
       enablePerf          = enablePerf,
-      enableRollingDB     = enableChiselDB_,
-      enableMonitor       = enableChiselDB_,
+      enableRollingDB     = false,
+      enableMonitor       = false,
       enableTLLog         = enableTLLog,
       enableCHILog        = enableCHILog,
       elaboratedTopDown   = enablePerf,
@@ -409,10 +424,13 @@ Usage: TestTopMatrix [<--option> <values>]
       sam                 = Seq(AddressSet.everything -> 33)
     )
     case OpenLLCParamKey => OpenLLCParam(
-      ways                = 2,
-      sets                = 2,
-      banks               = 1,
-      clientCaches        = Seq(L2Param()),
+      ways                = TestTopMatrixParams.l3Ways,
+      sets                = TestTopMatrixParams.l3Sets,
+      banks               = TestTopMatrixParams.l3Banks,
+      clientCaches        = Seq(L2Param(
+        ways = TestTopMatrixParams.l3CDirWays,
+        sets = TestTopMatrixParams.l3CDirSets
+      )),
       enablePerf          = enablePerf,
       enableRollingDB     = false,
       enableCHILog        = enableCHILog,
